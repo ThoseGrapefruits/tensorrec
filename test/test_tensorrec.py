@@ -8,14 +8,17 @@ import tensorflow as tf
 from tensorrec import TensorRec
 from tensorrec.util import generate_dummy_data_with_indicator, generate_dummy_data
 from tensorrec.session_management import set_session
-from test.datasets import get_movielens_100k
 
 
 class TensorRecTestCase(TestCase):
 
-    @classmethod
-    def setUpClass(cls):
+    def setUp(cls):
         cls.interactions, cls.user_features, cls.item_features = generate_dummy_data(
+            num_users=15, num_items=30, interaction_density=.5, num_user_features=200, num_item_features=200,
+            n_features_per_user=20, n_features_per_item=20, pos_int_ratio=.5
+        )
+
+        cls.unbiased_interactions, cls.unbiased_user_features, cls.unbiased_item_features = generate_dummy_data(
             num_users=15, num_items=30, interaction_density=.5, num_user_features=200, num_item_features=200,
             n_features_per_user=20, n_features_per_item=20, pos_int_ratio=.5
         )
@@ -23,8 +26,20 @@ class TensorRecTestCase(TestCase):
         cls.standard_model = TensorRec(n_components=10)
         cls.standard_model.fit(cls.interactions, cls.user_features, cls.item_features, epochs=10)
 
+        print(cls.standard_model.predict_item_bias(cls.item_features))
+
         cls.unbiased_model = TensorRec(n_components=10, biased=False)
-        cls.unbiased_model.fit(cls.interactions, cls.user_features, cls.item_features, epochs=10)
+        cls.unbiased_model.fit(cls.unbiased_interactions, cls.unbiased_user_features, cls.unbiased_item_features,
+                               epochs=10)
+
+        print(cls.standard_model.predict_item_bias(cls.item_features))
+
+    def _print_biases(self):
+        print("\nITEM BIAS")
+        print(self.standard_model.predict_item_bias(self.item_features))
+
+        print("\nUSER BIAS")
+        print(self.standard_model.predict_user_bias(self.user_features))
 
     def test_init(self):
         self.assertIsNotNone(TensorRec())
@@ -128,42 +143,16 @@ class TensorRecTestCase(TestCase):
             self.unbiased_model.predict_item_bias,
             self.item_features)
 
-
-class TensorRecMovielensPrediction(TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.movielens_100k = get_movielens_100k()
-        train_interactions, test_interactions, cls.user_features, cls.item_features, _ = cls.movielens_100k
-        cls.model = TensorRec()
-        cls.model.fit(
-            interactions=train_interactions,
-            user_features=cls.user_features,
-            item_features=cls.item_features,
-            epochs=5)
-
     def test_predict_user_bias(self):
-        user_bias = self.model.predict_user_bias(self.user_features)
+        user_bias = self.standard_model.predict_user_bias(self.user_features)
+        print(user_bias)
         self.assertTrue(any(user_bias))  # Make sure it isn't all 0s
+        self.assertTrue(any(self.standard_model.predict_user_bias(self.user_features)))
 
     def test_predict_item_bias(self):
-        item_bias = self.model.predict_item_bias(self.item_features)
+        item_bias = self.standard_model.predict_item_bias(self.item_features)
+        print(item_bias)
         self.assertTrue(any(item_bias))  # Make sure it isn't all 0s
-
-
-class TensorRecNormalizedTestCase(TensorRecTestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.interactions, cls.user_features, cls.item_features = generate_dummy_data_with_indicator(
-            num_users=10, num_items=20, interaction_density=.5
-        )
-
-        cls.standard_model = TensorRec(n_components=10, normalize_items=True, normalize_users=True)
-        cls.standard_model.fit(cls.interactions, cls.user_features, cls.item_features, epochs=10)
-
-        cls.unbiased_model = TensorRec(n_components=10, normalize_items=True, normalize_users=True, biased=False)
-        cls.unbiased_model.fit(cls.interactions, cls.user_features, cls.item_features, epochs=10)
 
 
 class TensorRecSavingTestCase(TestCase):
